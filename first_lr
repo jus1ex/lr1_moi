@@ -1,0 +1,144 @@
+import numpy as np
+import math
+
+xmin, xmax = 0, 1
+xstar = np.random.random(1)[0] * (xmax - xmin) + xmin
+
+def f(x):
+    return (np.exp(x)) / (1 + 2 * x + x ** 2)
+
+def random_nodes(n):
+    x = np.random.random(n).cumsum()
+    x = (x - x.min()) / x.ptp()
+    x = (xmax - xmin) * x + xmin
+    return x
+
+def justified_nodes(n):
+    return np.linspace(xmin, xmax, n)
+
+def lagrange(x, nodes, values):
+    result = 0
+    for i in range(len(nodes)):
+        val = values[i]
+        for j in range(len(nodes)):
+            if j != i:
+                val *= (x - nodes[j]) / (nodes[i] - nodes[j])
+        result += val
+    return result
+
+def lagrange_barycentric(x, nodes, values):
+    l = 1
+    for n in nodes:
+        l *= x - n
+    result = 0
+    for i in range(len(nodes)):
+        val = values[i]
+        w = x - nodes[i]
+        if w == 0:
+            return values[i]
+        for j in range(len(nodes)):
+            if j != i:
+                w *= (nodes[i] - nodes[j])
+        result += val / w
+
+    result *= l
+    return result
+
+def div_difference(nodes, values):
+    if len(values) == 1:
+        return values[0]
+    return (div_difference(nodes[1:], values[1:]) - div_difference(nodes[:-1], values[:-1])) / (nodes[-1] - nodes[0])
+
+def newton(x, nodes, values):
+    result = 0
+    for i in range(len(nodes)):
+        val = div_difference(nodes[:i+1], values[:i+1])
+        for j in range(i):
+            val *= x - nodes[j]
+        result += val
+    return result
+
+def real_fault(test_val, interpolation_values):
+    return np.abs(test_val - interpolation_values)
+
+def theor_fault(x, nodes, max_derivative):
+    return np.max(np.abs((f(x) * np.prod(x - nodes) * max_derivative) / np.math.factorial(len(nodes))))
+
+def minimize_fault(nodes, degree):
+    import itertools
+    test_nodes = random_nodes(20)
+    min_error = float('inf')
+    for subset in itertools.combinations(nodes, degree + 1):
+        current_error = max([theor_fault(x, subset, - np.sin(xmax / 2) / 16) for x in test_nodes])
+        if current_error < min_error:
+            min_error = current_error
+    return min_error
+
+N = [5, 10, 15, 20]
+interpolation_results = []
+test_val = f(xstar)
+for n in N:
+    rand_nod = random_nodes(n)
+    rand_nod_v = f(rand_nod)
+    jus_nod = justified_nodes(n)
+    jus_nod_v = f(jus_nod)
+    interpolation_results.append(real_fault(test_val, np.array([lagrange(xstar, rand_nod, rand_nod_v), lagrange(xstar, jus_nod, jus_nod_v), lagrange_barycentric(xstar, jus_nod, jus_nod_v), newton(xstar, jus_nod, jus_nod_v)])))
+
+print("Погрешность для многочлена Лагранжа:")
+print("1. С произвольными узлами:")
+for i in range(len(interpolation_results)):
+    print(f"N -> {N[i]}")
+    print(f"погрешность -> {interpolation_results[i][0]}")
+    print()
+
+print("2. С равноотстоящими узлами:")
+for i in range(len(interpolation_results)):
+    print(f"N -> {N[i]}")
+    print(f"погрешность -> {interpolation_results[i][1]}")
+    print()
+
+print("3. В барицентрической форме:")
+for i in range(len(interpolation_results)):
+    print(f"N -> {N[i]}")
+    print(f"погрешность -> {interpolation_results[i][2]}")
+    print()
+
+print("4. Через разделенные разности:")
+for i in range(len(interpolation_results)):
+    print(f"N -> {N[i]}")
+    print(f"погрешность -> {interpolation_results[i][2]}")
+    print()
+
+nodes = random_nodes(20)
+print("---------------------------------------------------------------")
+print("Погрешность для многочлена Лагранжа (практическая и теоретическая):")
+print("1. С произвольными узлами:")
+print(f"Практическая -> {real_fault(test_val, lagrange(xstar, nodes, f(nodes)))}")
+print(f"Теоретическая -> {theor_fault(xstar, nodes, - np.sin(xmax / 2) / 16)}")
+print()
+
+nodes = justified_nodes(20)
+
+print("2. С равноотстоящими узлами:")
+print(f"Практическая -> {real_fault(test_val, lagrange(xstar, nodes, f(nodes)))}")
+print(f"Теоретическая -> {theor_fault(xstar, nodes, - np.sin(xmax / 2) / 16)}")
+print()
+
+print("3. В барицентрической форме:")
+print(f"Практическая -> {real_fault(test_val, lagrange_barycentric(xstar, nodes, f(nodes)))}")
+print(f"Теоретическая -> {theor_fault(xstar, nodes, - np.sin(xmax / 2) / 16)}")
+print()
+
+print("4. Через разделенные разности:")
+print(f"Практическая -> {real_fault(test_val, newton(xstar, nodes, f(nodes)))}")
+print(f"Теоретическая -> {theor_fault(xstar, nodes, - np.sin(xmax / 2) / 16)}")
+print()
+
+min_fault_1 = minimize_fault(nodes, 1)
+min_fault_2 = minimize_fault(nodes, 2)
+min_fault_3 = minimize_fault(nodes, 3)
+
+
+print("---------------------------------------------------------------")
+print("Погрешность (минимизированная) с многочленами Лагранжа 1, 2 и 3 степени -> || ", min_fault_1, "||", min_fault_2, "||",  min_fault_3)
+
